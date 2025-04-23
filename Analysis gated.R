@@ -30,14 +30,15 @@ gated_df <- gated_df |>
 # order sce by sample name (the order of cells within samples is the same as in the gated file)
 
 ord <- order(factor(sce$Sample_Name, levels = unique(gated_df$Sample_Name)))
-sce <- sce[,order]
+sce <- sce[,ord]
 
 sce$gate <- gated_df$OmiqFilter
 
 umap_df$gate <- gated_df$OmiqFilter
 
+# Basic plots gates for sanity check ####
 umap_df |> 
   dplyr::filter(sample_type != "Healthy") |>
   ggplot(aes(x=UMAP1, y=UMAP2, color = gate))+
-    geom_point(alpha = 0.6)+
+    geom_point(alpha = 0.6, size = 0.7)+
   facet_wrap(~sample_type)
