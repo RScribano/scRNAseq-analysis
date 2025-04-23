@@ -27,6 +27,7 @@ library(UCell)
 rds_path <- file.path("20250415_SCE.RDS")
 sce<-readRDS(rds_path)
 
+
 # Data wrangling####
 coldata_df <- as.data.frame(colData(sce))
 
@@ -69,6 +70,46 @@ sum_exp <- colSums(expr_mat_signature)
 # append to coldata 
 colData(sce)$signature_mean <- mean_exp
 colData(sce)$signature_sum <- sum_exp
+
+
+# Fix labels MRD_43 ####
+# in cartridge F tags 6 and 7 have been swapped around so that Dx is swapped with D33. we need to change that 
+tags <- sce$ident[sce$orig.ident == "cart_f"]
+
+tags_new <- dplyr::case_when(tags == "SampleTag07_hs" ~ "SampleTag06_hs",
+                             tags == "SampleTag06_hs" ~ "SampleTag07_hs")
+
+sce$ident[sce$orig.ident == "cart_f"] <- tags_new
+
+# now we need t oswitch around timepoint and sample type
+
+timepoints <- as.character(sce$timepoint[sce$individual == "MRD_43"])
+sample_type <- as.character(sce$sample_type[sce$individual == "MRD_43"])
+sample_names <- as.character(sce$Sample_Name[sce$individual == "MRD_43"])
+
+
+timepoints_new <- dplyr::case_when(
+  timepoints == "Dx" ~ "D33",
+  timepoints == "D33" ~ "Dx",
+  TRUE ~ timepoints
+)
+
+sampletype_new <- dplyr::case_when(
+  sample_type == "Diagnosis" ~ "MRD timepoints",
+  sample_type == "MRD timepoints" ~ "Diagnosis",
+  TRUE ~ sample_type
+)
+
+samplenames_new <- dplyr::case_when(
+  sample_names == "MRD43_Dx" ~ "MRD43_D33",
+  sample_names == "MRD43_D33" ~ "MRD43_Dx",
+  TRUE ~ sample_names
+)
+  
+sce$timepoint[sce$individual == "MRD_43"] <- timepoints_new
+sce$sample_type[sce$individual == "MRD_43"] <- sampletype_new
+sce$Sample_Name[sce$individual == "MRD_43"] <- samplenames_new
+
 
 # Plots ####
 
@@ -146,7 +187,9 @@ p_1+
   guides(colour = guide_legend(override.aes = list(size = 5)))
 
 
-# manual plotting with ggplot ####
+
+# make UMAP df ####
+
 umap_df <- as.data.frame(reducedDim(sce, "UMAP"))
 umap_df$signature_mean <- colData(sce)$signature_mean
 umap_df$signature_sum <- colData(sce)$signature_sum
@@ -155,8 +198,19 @@ umap_df$timepoint <- colData(sce)$timepoint
 umap_df$sample_type <- colData(sce)$sample_type
 umap_df$relapse <- colData(sce)$relapse
 umap_df$MRD_risk <- colData(sce)$MRD_risk
+umap_df$Cell_Type_Experimental <- colData(sce)$Cell_Type_Experimental
 
 
+# add to the umap df
+for (gene in gene_signature_detected){
+  print(gene)
+  umap_df[[gene]] <- as.vector(assay(sce, "logcounts")[gene,])
+}
+
+#save as .csv
+write.csv(umap_df, "20250423_umapd_df.csv")
+
+# manual plotting with ggplot ####
 # plot all samples colored by sample (for sanity check)
 umap_df |>
   ggplot(aes(x=UMAP1, y= UMAP2, color = individual))+
@@ -255,11 +309,7 @@ umap_df |>
 
 # Color by each gene of the signature individually ####
 
-# add to the umap df
-for (gene in gene_signature_detected){
-  print(gene)
-  umap_df[[gene]] <- as.vector(assay(sce, "logcounts")[gene,])
-}
+
 
 # use patchwork to plot the UMAP based on the genes from the gene signature
 
@@ -330,7 +380,7 @@ ggplot(data = umap_df, aes(x= UMAP1, y=UMAP2))+
 
 #barplot cell signature score in B-cells only
 
-umap_df$Cell_Type_Experimental <- colData(sce)$Cell_Type_Experimental
+
 
 umap_df |> 
   group_by(sample_type, Cell_Type_Experimental)|>
