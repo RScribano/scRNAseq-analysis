@@ -118,7 +118,18 @@ signatures$Mito_ETC <- mito_detected
 sce <- ScoreSignatures_UCell(sce, features = signatures,
                              assay = 'logcounts', name = NULL)
 
-# export as dataframe column
-umap_df$UCell_signature_score <- t(as.data.frame(assay(altExp(sce, "UCell"))))
+UCell_scores <- as.data.frame(t(as.data.frame(assay(altExp(sce, "UCell")))))
+
+
+# export as datafr# export as datafr# export as dataframe column
+umap_df$sample_name <- colData(sce)$Sample_Name
+umap_df$ComplexI <- UCell_scores$ComplexI
+umap_df$Mito_ETC  <- UCell_scores$Mito_ETC
+umap_df$Pyrimidine_synthesis <- UCell_scores$Pyrimidine_synthesis
+
+# save used columns to .csv (can be merged back to larger df based on)
+umap_df |>
+  select(c("individual", "timepoint", "sample_name", "ComplexI", "Mito_ETC", "Pyrimidine_synthesis")) |>
+  write.csv("20250424_signatures.csv")
 
 
