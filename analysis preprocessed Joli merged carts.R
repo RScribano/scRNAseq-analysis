@@ -74,6 +74,8 @@ colData(sce)$signature_sum <- sum_exp
 
 # Fix labels MRD_43 ####
 # in cartridge F tags 6 and 7 have been swapped around so that Dx is swapped with D33. we need to change that 
+
+# 1. Swap sample tags
 tags <- sce$ident[sce$orig.ident == "cart_f"]
 
 tags_new <- dplyr::case_when(tags == "SampleTag07_hs" ~ "SampleTag06_hs",
@@ -81,12 +83,9 @@ tags_new <- dplyr::case_when(tags == "SampleTag07_hs" ~ "SampleTag06_hs",
 
 sce$ident[sce$orig.ident == "cart_f"] <- tags_new
 
-# now we need t oswitch around timepoint and sample type
+# 2. swap timepoint
 
 timepoints <- as.character(sce$timepoint[sce$individual == "MRD_43"])
-sample_type <- as.character(sce$sample_type[sce$individual == "MRD_43"])
-sample_names <- as.character(sce$Sample_Name[sce$individual == "MRD_43"])
-
 
 timepoints_new <- dplyr::case_when(
   timepoints == "Dx" ~ "D33",
@@ -94,10 +93,19 @@ timepoints_new <- dplyr::case_when(
   TRUE ~ timepoints
 )
 
+# 3. swap sample type
+sample_type <- as.character(sce$sample_type[sce$individual == "MRD_43"])
+
 sampletype_new <- dplyr::case_when(
   sample_type == "Diagnosis" ~ "MRD timepoints",
   sample_type == "MRD timepoints" ~ "Diagnosis",
   TRUE ~ sample_type
+  
+
+# 4. swap sample name
+
+sample_names <- as.character(sce$Sample_Name[sce$individual == "MRD_43"])
+
 )
 
 samplenames_new <- dplyr::case_when(
@@ -106,6 +114,7 @@ samplenames_new <- dplyr::case_when(
   TRUE ~ sample_names
 )
   
+# 5. apply changes
 sce$timepoint[sce$individual == "MRD_43"] <- timepoints_new
 sce$sample_type[sce$individual == "MRD_43"] <- sampletype_new
 sce$Sample_Name[sce$individual == "MRD_43"] <- samplenames_new
@@ -309,8 +318,6 @@ umap_df |>
 
 # Color by each gene of the signature individually ####
 
-
-
 # use patchwork to plot the UMAP based on the genes from the gene signature
 
 # create list of plots
@@ -357,6 +364,42 @@ ggsave("20250415_gene signature patchwork_3.png",
        plot = grid, width = 2100,height =1226, unit = "px",
        scale = 5)
 
+# plot for each gene divded by sample type ####
+plots <- purrr::map(gene_signature_detected, function(gene_name){
+  umap_df |>
+    ggplot(aes(x = UMAP1, y=  UMAP2, color = .data[[gene_name]], alpha = .data[[gene_name]]))+
+    geom_point(size = 0.6)+
+    scale_color_gradient(low= "grey70", high = "blue")+
+    guides(alpha = "none")+
+    ggtitle(gene_name)+
+    facet_wrap(~sample_type, ncol = 4)+
+    theme_minimal(base_size = 20)
+})
+
+purrr::walk2(
+  .x = plots,
+  .y = gene_signature_detected,
+  .f = ~ggsave(
+    filename = paste0("20250416_", .y, ".png"),
+    plot = .x,
+    width = 1100,
+    height = 680,
+    unit = "px",
+    dpi = 72,
+    scale = 1,
+    limitsize = FALSE,
+    bg = "white"
+  )
+)
+
+
+ggplot(data = umap_df,aes(x = UMAP1, y=  UMAP2))+
+  geom_point(size = 0.6, aes(color = CYCS, alpha = CYCS))+
+  scale_color_gradient(low = "grey70", high = "blue")+
+  guides(alpha = "none")+
+  ggtitle("CYCS")+
+  facet_wrap(~ sample_type, ncol = 4)+
+  theme_minimal(base_size = 18)
 # Cell signature scoring using UCell ####
 signature <- list(
   metabolic_genes= c("CYCS","CYC1", "CS","NDUFA4","NDUFC1","NDUFS2","NDUFS5","NDUFV1","NDUFB3", 
@@ -489,41 +532,6 @@ ggsave("20250415_umap_adt_1.png",
        plot = grid, width = 2100,height =1226, unit = "px",
        scale = 5)
 
-# plot for each gene divded by sample type ####
-plots <- purrr::map(gene_signature_detected, function(gene_name){
-  umap_df |>
-    ggplot(aes(x = UMAP1, y=  UMAP2, color = .data[[gene_name]], alpha = .data[[gene_name]]))+
-    geom_point(size = 0.6)+
-    scale_color_gradient(low= "grey70", high = "blue")+
-    guides(alpha = "none")+
-    ggtitle(gene_name)+
-    facet_wrap(~sample_type, ncol = 4)+
-    theme_minimal(base_size = 20)
-})
 
-purrr::walk2(
-  .x = plots,
-  .y = gene_signature_detected,
-  .f = ~ggsave(
-    filename = paste0("20250416_", .y, ".png"),
-    plot = .x,
-    width = 1100,
-    height = 680,
-    unit = "px",
-    dpi = 72,
-    scale = 1,
-    limitsize = FALSE,
-    bg = "white"
-  )
-)
-
-
-ggplot(data = umap_df,aes(x = UMAP1, y=  UMAP2))+
-  geom_point(size = 0.6, aes(color = CYCS, alpha = CYCS))+
-  scale_color_gradient(low = "grey70", high = "blue")+
-  guides(alpha = "none")+
-  ggtitle("CYCS")+
-  facet_wrap(~ sample_type, ncol = 4)+
-  theme_minimal(base_size = 18)
 
 
