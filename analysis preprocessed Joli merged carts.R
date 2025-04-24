@@ -17,7 +17,7 @@ library(UCell)
 
 # import data ####
 
-# These steps were carreid out on the CCDL server. SCE object obtained by
+# These steps were carried out on the CCDL server. SCE object obtained by
 # 1. converting the Seurat object to SCE
 # 2. Obtaining 2000 highly variable genes
 # 3. Running PCA
@@ -49,28 +49,6 @@ coldata_df <- coldata_df |>
   )
 
 colData(sce) <- DataFrame(coldata_df)
-
-
-# Gene signature ####
-
-# calculate mean gene expression per cell of gene signature
-gene_signature_path <- file.path("gene list checking in MRD.csv")
-gene_signature <- read.csv(gene_signature_path)
-
-# check that genes are in the sce
-gene_signature_detected <- gene_signature$gene.list[gene_signature$gene.list%in% rownames(sce)]
-
-# extract expression of target genes
-expr_mat_signature <- logcounts(sce)[gene_signature_detected,]
-
-# calculate mean across rows (genes)
-mean_exp <- colMeans(expr_mat_signature)
-sum_exp <- colSums(expr_mat_signature)
-
-# append to coldata 
-colData(sce)$signature_mean <- mean_exp
-colData(sce)$signature_sum <- sum_exp
-
 
 # Fix labels MRD_43 ####
 # in cartridge F tags 6 and 7 have been swapped around so that Dx is swapped with D33. we need to change that 
@@ -118,6 +96,27 @@ samplenames_new <- dplyr::case_when(
 sce$timepoint[sce$individual == "MRD_43"] <- timepoints_new
 sce$sample_type[sce$individual == "MRD_43"] <- sampletype_new
 sce$Sample_Name[sce$individual == "MRD_43"] <- samplenames_new
+
+# Gene signature ####
+
+# calculate mean gene expression per cell of gene signature
+gene_signature_path <- file.path("gene list checking in MRD.csv")
+gene_signature <- read.csv(gene_signature_path)
+
+# check that genes are in the sce
+gene_signature_detected <- gene_signature$gene.list[gene_signature$gene.list%in% rownames(sce)]
+
+# extract expression of target genes
+expr_mat_signature <- logcounts(sce)[gene_signature_detected,]
+
+# calculate mean across rows (genes)
+mean_exp <- colMeans(expr_mat_signature)
+sum_exp <- colSums(expr_mat_signature)
+
+# append to coldata 
+colData(sce)$signature_mean <- mean_exp
+colData(sce)$signature_sum <- sum_exp
+
 
 
 # Plots ####

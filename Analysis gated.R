@@ -14,6 +14,8 @@ library(ggridges)
 library(scales)
 library(patchwork)
 library(UCell)
+library(ggpubr)
+library(pheatmap)
 
 
 # import gated data ####
@@ -122,14 +124,166 @@ UCell_scores <- as.data.frame(t(as.data.frame(assay(altExp(sce, "UCell")))))
 
 
 # export as datafr# export as datafr# export as dataframe column
-umap_df$sample_name <- colData(sce)$Sample_Name
-umap_df$ComplexI <- UCell_scores$ComplexI
-umap_df$Mito_ETC  <- UCell_scores$Mito_ETC
-umap_df$Pyrimidine_synthesis <- UCell_scores$Pyrimidine_synthesis
 
-# save used columns to .csv (can be merged back to larger df based on)
-umap_df |>
-  select(c("individual", "timepoint", "sample_name", "ComplexI", "Mito_ETC", "Pyrimidine_synthesis")) |>
-  write.csv("20250424_signatures.csv")
+signatures_df <- data.frame(
+  
+  sample_name = colData(sce)$Sample_Name,
+  timepoint = colData(sce)$timepoint,
+  individual = colData(sce)$individual,
+  MRD_risk = colData(sce)$MRD_risk,
+  sample_type = colData(sce)$sample_type,
+  relapse = colData(sce)$relapse,
+  gate = colData(sce)$gate,
+  ComplexI = UCell_scores$ComplexI,
+  Mito_ETC = UCell_scores$Mito_ETC,
+  Pyrimidine_synthesis = UCell_scores$Pyrimidine_synthesis,
+  stringsAsFactors = FALSE
+)
+
+write.csv(signatures_df, "20250424_signatures.csv")
+
+
+# plot signature #### 
+
+# convert to long format for better handling during plotting 
+
+signatures_longer <- signatures_df |>
+  filter(gate == "Leukemia") |>
+  tidyr::pivot_longer(cols = c( "ComplexI","Mito_ETC","Pyrimidine_synthesis"),
+               names_to = "signature")
+
+
+# Violin plot 1 - individual, by sample type
+p0<- signatures_longer |>
+  dplyr::filter(sample_type != "Healthy") |>
+  ggplot(aes(x=individual, y=value))+
+  geom_violin(aes(fill = signature))+
+  geom_jitter(size = 0.5, aes(fill = signature, color = signature), position = position_jitterdodge(), alpha = 0.2)+
+  theme_gray(base_size = 22)+
+  theme(axis.text.x = element_text(angle = 60, hjust = 1))+
+  facet_grid(sample_type~signature)
+
+ggsave("20250424_gray_overall violin plot signatures.png",
+       plot = p0, width = 1600,height =1100, unit = "px",
+       scale = 5)
+
+
+# divided by relapse 
+
+p1<-signatures_longer |>
+  dplyr::filter(
+    sample_type %in% c("Diagnosis", 'MRD timepoints'),
+    relapse == "no") |>
+  ggplot(aes(x=individual, y=value))+
+  geom_violin(aes(fill = signature))+
+  geom_jitter(aes(fill = signature, color = signature), size = 0.5, position = position_jitterdodge(), alpha = 0.2)+
+  theme_gray(base_size = 22)+
+  theme(axis.text.x = element_text(angle = 60, hjust = 1))+
+  facet_grid(sample_type~signature)+
+  ggtitle("Complete Remission")
+
+p2 <- signatures_longer |>
+  dplyr::filter(
+    sample_type %in% c("Diagnosis", 'MRD timepoints'),
+    relapse == "yes") |>
+  ggplot(aes(x=individual, y=value))+
+  geom_violin(aes(fill = signature))+
+  geom_jitter(aes(fill = signature, color = signature),size = 0.5, position = position_jitterdodge(), alpha = 0.2)+
+  theme_gray(base_size = 22)+
+  theme(axis.text.x = element_text(angle = 60, hjust = 1))+
+  facet_grid(sample_type~signature)+
+  ggtitle("Relapsed")
+
+grid<-wrap_plots(p1,p2, ncol = 2)
+
+ggsave("20250424_no relapse_signature score by outcome.png",
+       plot = grid, width = 2100,height =1226, unit = "px",
+       scale = 5)
+
+# heatmaps single genes  ###
+
+# the part below could DEFINETLY be automated with a function + using purrr
+# but for now let's do mancave style
+
+# one heatmpa per gene of each signature 
+
+# Complex I signatures #####
+
+signatures_df_leukemia <- signatures_df |>
+  filter(gate == "Leukemia",
+         sample_type != "Healthy")
+
+complexi_df <-  data.frame(
+  individual = signatures_df_leukemia$individual,
+  timepoint = signatures_df_leukemia$timepoint,
+  sample_type = signatures_df_leukemia$sample_type,
+  sample_name = signatures_df_leukemia$sample_name,
+  relapse = signatures_df_leukemia$relapse
+)
+
+# individual expression of genes in the signatures
+for (gene in signatures$ComplexI){
+  print(gene)
+  complexi_df[[gene]] <- as.vector(assay(sce[, (sce$gate == "Leukemia")&(sce$sample_type != "Healthy")], "counts")[gene,]) # !! RAW COUNTS!!
+}
+
+# convert to longer
+complexi_longer <- complexi_df |>
+  pivot_longer(cols = 6:30,
+                names_to = "genes",
+               values_to = 'value')
+
+# annotation matrix
+annot <- complexi_longer |>
+  filter(sample_type != "Healthy") |>
+  group_by(sample_name) |>
+  summarise(
+    sample_name = first(sample_name),
+    sample_type = first(sample_type),  # or use `mode` or any other appropriate function
+    relapse = first(relapse),  # Assuming you want the first value, or aggregate them
+    invididual = first(individual),
+    .groups = 'drop'  # This drops the grouping after summarizing
+  ) |>
+  tibble::column_to_rownames("sample_name")
+
+
+# mean expression per patient
+complexi_longer <- complexi_longer |>
+      group_by(genes, sample_name, individual) |>
+      summarise(mean = mean(value), .groups = "drop") 
+
+# convert to matrix
+complexi_mat <- complexi_longer |>
+  select(c("sample_name", "genes", "mean")) |>
+  pivot_wider(names_from = sample_name, values_from = mean) |>
+  tibble::column_to_rownames("genes") |>
+  as.matrix()
+
+# annotation colors
+annot_colors <- list(
+  relapse = c("yes"="red","no"="blue"),
+  sample_type = c("Diagnosis" = "lightblue", "MRD timepoints" = "purple", "Relapse" = "rosybrown")
+  )
+
+#heatmap
+pheatmap(complexi_mat,  # Only numeric columns for the heatmap
+         scale = "none",  # Optional: scales data by columns (variables)
+         clustering_distance_rows = "euclidean",  # Distance metric for rows (patients)
+         clustering_distance_cols = "euclidean",  # Distance metric for columns (variables)
+         clustering_method = "complete",  # Clustering method (complete linkage, etc.)
+         show_rownames = TRUE,  # Show row names (patient IDs)
+         show_colnames = TRUE,  # Show column names (variable names)
+         color = colorRampPalette(c("blue", "white", "red"))(100),  # Color scale
+        annotation_col = annot,#annotation_row = annot,
+        annotation_colors = annot_colors,
+          # Define the colors for annotations
+         main = "Complex I genes",  # Title of the heatmap
+         fontsize_row = 8,  # Decrease font size of row names (patient IDs) to make more space
+         angle_row = 45,  # Rotate row names to avoid squishing
+         cellheight = 8,  # Adjust the height of each cell for better spacing of row names
+         
+)
+
+
 
 
