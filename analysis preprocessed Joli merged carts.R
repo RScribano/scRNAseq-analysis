@@ -458,11 +458,15 @@ rownames(altExp(sce, "ADT")) <- rowData(altExp(sce, "ADT"))$antigen
 # extract adt expression as dataframe
 adt_df <- as.data.frame(t(logcounts(altExp(sce, "ADT"))))
 
+# extract gene for tdt
+adt_df['tdt'] <- assay(sce, "logcounts")["DNTT",]
+
+
 # add key for sce metadata 
-adt_df$Sample_Name <- coldata_df$Sample_Name
+adt_df$Sample_Name <- coldata_df$Sample_Name[]
 
 #export just in case
-write.csv(adt_df, "20250415_adt_exp.csv")
+write.csv(adt_df, "20250523_adt_exp.csv")
 
 # plot distributions ADT #### 
 
@@ -514,23 +518,36 @@ plots <- purrr::map(colnames(adt_df[1:15]), function(adt) {
   adt_df |>
     filter(sample_type != "Healthy") |>
     ggplot(aes(x = UMAP1, y = UMAP2)) +
-             
-             # first layer grey
-    geom_point(size = 0.6, color = "grey80", alpha = 0.5) +
-      
     geom_point(size = 0.6,
                aes(color = .data[[adt]], alpha = .data[[adt]]))+
-    scale_color_distiller(palette = "Reds", direction = 1) +
+    scale_color_gradient(low = "grey80", high = "darkorchid")+
     guides(alpha = "none") + 
     ggtitle(adt) +
-    theme_minimal(base_size = 18)
+    theme_minimal(base_size = 22)
     })
 
 grid<-wrap_plots(plots, ncol = 6, axes = "collect")
-ggsave("20250415_umap_adt_1.png",
+
+
+ggsave("202504_umap_adt_1.png",
        plot = grid, width = 2100,height =1226, unit = "px",
        scale = 5)
 
 
+
+# save plots indivdually
+adt_names <- colnames(adt_df[1:15])
+
+purrr::walk2(plots, adt_names, function(p, name) {
+  ggsave(
+    filename = paste0("umap_adt_", name, ".png"),
+    plot = p,
+    width = 1600,
+    height = 1120,
+    unit = "px",
+    scale = 5,
+    bg = "white"
+  )
+})
 
 
